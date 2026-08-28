@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Upload statements — ClearSpend{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Upload statement PDFs</h1>
+  <p class="muted">Upload one or more credit card statement PDFs. They're parsed and matched against
+    the shared merchant mapping table, then combined into a single Excel workbook you can download.</p>
+  <form method="post" enctype="multipart/form-data">
+    <label>Statement PDF(s)
+      <input type="file" name="statements" accept="application/pdf" multiple required>
+    </label>
+    <button type="submit">Process statements</button>
+  </form>
+</div>
+{% endblock %}

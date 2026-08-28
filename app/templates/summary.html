@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Summary — ClearSpend{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Processing complete</h1>
+  <ul class="stats">
+    <li><strong>{{ stats.total }}</strong> transactions processed</li>
+    <li><strong>{{ stats.matched }}</strong> merchants matched</li>
+    <li><strong>{{ stats.unrecognized }}</strong> merchants not recognized (flagged for admin review)</li>
+    <li><strong>{{ stats.duplicates }}</strong> possible duplicate row(s) flagged</li>
+  </ul>
+  <a class="button" href="{{ url_for('main.download', token=token) }}">Download Excel workbook</a>
+  <p class="muted"><a href="{{ url_for('main.upload') }}">&larr; Upload more statements</a></p>
+</div>
+{% endblock %}
