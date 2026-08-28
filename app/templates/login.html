@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Log in — ClearSpend{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <h1>ClearSpend</h1>
+  <p class="muted">Sign in with an account created by your administrator.</p>
+  {% if error %}<p class="flash flash-error">{{ error }}</p>{% endif %}
+  <form method="post">
+    <label>Username
+      <input type="text" name="username" autocomplete="username" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Log in</button>
+  </form>
+</div>
+{% endblock %}

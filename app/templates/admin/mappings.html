@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Mapping Manager — ClearSpend{% endblock %}
+{% block content %}
+<h1>Mapping Manager</h1>
+
+<div class="card">
+  <form method="get" class="inline-form">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search description, name, or category">
+    <button type="submit">Search</button>
+    {% if q %}<a href="{{ url_for('admin.mappings') }}">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <h2>Add mapping</h2>
+  <form method="post" action="{{ url_for('admin.mappings_add') }}" class="inline-form">
+    <input type="text" name="original_description" placeholder="Original description" required>
+    <input type="text" name="cleaned_name" placeholder="Cleaned name" required>
+    <input type="text" name="category" placeholder="Category" list="category-list" required>
+    <button type="submit">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Bulk actions</h2>
+  <form method="post" action="{{ url_for('admin.mappings_bulk_category') }}" class="inline-form" id="bulk-form">
+    <span class="muted">Selected rows &rarr;</span>
+    <input type="text" name="new_category" placeholder="New category" list="category-list" required>
+    <button type="submit">Assign to selected</button>
+  </form>
+  <form method="post" action="{{ url_for('admin.mappings_rename_category') }}" class="inline-form">
+    <select name="old_category" required>
+      <option value="" disabled selected>Rename category&hellip;</option>
+      {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+    </select>
+    <input type="text" name="new_category_name" placeholder="New name" required>
+    <button type="submit">Rename everywhere</button>
+  </form>
+  <div class="inline-form">
+    <a class="button" href="{{ url_for('admin.mappings_export') }}">Export CSV</a>
+    <form method="post" action="{{ url_for('admin.mappings_import') }}" enctype="multipart/form-data" class="inline-form">
+      <input type="file" name="csv_file" accept=".csv" required>
+      <button type="submit">Import CSV</button>
+    </form>
+  </div>
+</div>
+
+<datalist id="category-list">
+  {% for c in categories %}<option value="{{ c }}">{% endfor %}
+</datalist>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>Original Description</th>
+      <th>Cleaned Name</th>
+      <th>Category</th>
+      <th>Updated</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><input type="checkbox" name="mapping_ids" value="{{ row.id }}" form="bulk-form"></td>
+      <td>{{ row.original_description }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.mappings_edit', mapping_id=row.id) }}" class="inline-form">
+          <input type="text" name="cleaned_name" value="{{ row.cleaned_merchant.name }}">
+          <input type="text" name="category" value="{{ row.cleaned_merchant.category }}" list="category-list">
+          <button type="submit">Save</button>
+        </form>
+        {% if row.cleaned_merchant.mappings|length > 1 %}
+        <span class="muted">shared by {{ row.cleaned_merchant.mappings|length }} descriptions</span>
+        {% endif %}
+      </td>
+      <td>{{ row.cleaned_merchant.category }}</td>
+      <td class="muted">{{ row.updated_at.strftime('%Y-%m-%d') if row.updated_at else '' }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.mappings_delete', mapping_id=row.id) }}"
+              onsubmit="return confirm('Delete this mapping row?');">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No mapping rows found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

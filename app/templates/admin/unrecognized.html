@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Unrecognized Merchants — ClearSpend{% endblock %}
+{% block content %}
+<h1>Unrecognized Merchants</h1>
+<p class="muted">Descriptions that didn't match anything in the mapping table across any user's uploads.
+  Export the pending list, get suggestions (e.g. from an AI agent in a separate session), then import the
+  results back in.</p>
+
+<div class="card inline-form">
+  <a class="button" href="{{ url_for('admin.unrecognized_export') }}">Export pending as CSV</a>
+  <form method="post" action="{{ url_for('admin.unrecognized_import') }}" enctype="multipart/form-data" class="inline-form">
+    <input type="file" name="csv_file" accept=".csv" required>
+    <button type="submit">Import resolved CSV</button>
+  </form>
+  <span class="muted">
+    Sort: <a href="{{ url_for('admin.unrecognized', sort='total_amount') }}">Amount</a> |
+    <a href="{{ url_for('admin.unrecognized', sort='occurrence_count') }}">Occurrences</a>
+  </span>
+</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Original Description</th>
+      <th>Occurrences</th>
+      <th>Total Amount (AED)</th>
+      <th>First Seen</th>
+      <th>Last Seen</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.original_description }}</td>
+      <td>{{ row.occurrence_count }}</td>
+      <td>{{ "%.2f"|format(row.total_amount) }}</td>
+      <td class="muted">{{ row.first_seen_at.strftime('%Y-%m-%d') if row.first_seen_at else '' }}</td>
+      <td class="muted">{{ row.last_seen_at.strftime('%Y-%m-%d') if row.last_seen_at else '' }}</td>
+      <td>{{ row.status }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.unrecognized_delete', row_id=row.id) }}"
+              onsubmit="return confirm('Remove from the queue without adding a mapping?');">
+          <button type="submit" class="danger">Dismiss</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Nothing outstanding — every merchant seen so far is mapped.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

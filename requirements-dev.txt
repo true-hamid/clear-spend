@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==8.3.3
+fpdf2==2.8.8
+pytest-cov==7.1.0
+coverage==7.15.4
