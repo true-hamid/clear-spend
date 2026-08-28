@@ -504,3 +504,68 @@ class TestUserManagement:
             user = User.query.filter_by(username="sneaky").first()
             assert user is not None
             assert user.role == "user"
+
+    def test_admin_deletes_normal_user(self, app, client, admin_user, normal_user):
+        login_admin(client)
+        resp = client.post(f"/admin/users/{normal_user}/delete", follow_redirects=True)
+        assert resp.status_code == 200
+        with app.app_context():
+            from app import db
+
+            assert db.session.get(User, normal_user) is None
+
+    def test_deleted_user_can_no_longer_log_in(self, client, admin_user, normal_user):
+        login_admin(client)
+        client.post(f"/admin/users/{normal_user}/delete")
+        client.get("/logout")
+        resp = login_user(client)
+        assert b"Invalid username or password" in resp.data
+
+    def test_admin_can_delete_another_admin(self, app, client, admin_user):
+        with app.app_context():
+            from app import db
+            from werkzeug.security import generate_password_hash
+
+            other_admin = User(
+                username="otheradmin",
+                password_hash=generate_password_hash("otheradminpass"),
+                role="admin",
+            )
+            db.session.add(other_admin)
+            db.session.commit()
+            other_admin_id = other_admin.id
+
+        login_admin(client)
+        client.post(f"/admin/users/{other_admin_id}/delete")
+        with app.app_context():
+            from app import db
+
+            assert db.session.get(User, other_admin_id) is None
+
+    def test_admin_cannot_delete_own_account(self, app, client, admin_user):
+        login_admin(client)
+        resp = client.post(f"/admin/users/{admin_user}/delete", follow_redirects=True)
+        assert b"cannot delete your own account" in resp.data.lower()
+        with app.app_context():
+            from app import db
+
+            assert db.session.get(User, admin_user) is not None
+
+    def test_delete_nonexistent_user_returns_404(self, client, admin_user):
+        login_admin(client)
+        resp = client.post("/admin/users/999999/delete")
+        assert resp.status_code == 404
+
+    def test_normal_user_cannot_delete_users(self, app, client, normal_user, admin_user):
+        login_user(client)
+        resp = client.post(f"/admin/users/{admin_user}/delete")
+        assert resp.status_code == 403
+        with app.app_context():
+            from app import db
+
+            assert db.session.get(User, admin_user) is not None
+
+    def test_unauthenticated_delete_redirects_to_login(self, client, normal_user):
+        resp = client.post(f"/admin/users/{normal_user}/delete")
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]

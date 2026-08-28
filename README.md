@@ -28,10 +28,12 @@ python manage.py reset-password alice
 
 Normal ('user'-role) accounts can also be created in-app by an admin, from
 the "Manage Users" page (`/admin/users`) — the admin sets the new user's
-initial password directly in the form. `manage.py reset-password` is still
-the only way to reset a password for an account nobody can currently log
-into; a logged-in user of either role can change their own password from
-"Change Password" in the nav (`/account/password`).
+initial password directly in the form. The same page lets an admin delete
+any account except their own (self-deletion is blocked server-side).
+`manage.py reset-password` is still the only way to reset a password for
+an account nobody can currently log into; a logged-in user of either role
+can change their own password from "Change Password" in the nav
+(`/account/password`).
 
 ## Running
 
@@ -82,11 +84,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-158 tests cover the matching engine, PDF parsing (including
+165 tests cover the matching engine, PDF parsing (including
 `tests/fixtures/sample_statement.pdf`, a redacted real statement export —
 see `docs/parsing.md`), the Excel builder, auth/role enforcement, in-app
-user creation and self-service password changes, the Mapping Manager and
-Unrecognized Merchants admin routes, and the full upload → download flow
-via Flask's test client. `requirements-dev.txt` pulls in `pytest` and
-`fpdf2` (used only to generate throwaway synthetic statement PDFs for
-parser edge-case tests) on top of the runtime dependencies.
+user creation/deletion and self-service password changes, the Mapping
+Manager and Unrecognized Merchants admin routes, and the full upload →
+download flow via Flask's test client. `requirements-dev.txt` pulls in
+`pytest` and `fpdf2` (used only to generate throwaway synthetic statement
+PDFs for parser edge-case tests) on top of the runtime dependencies.

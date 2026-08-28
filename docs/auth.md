@@ -22,6 +22,12 @@
   there's no email delivery step. The form only ever creates `role="user"`
   accounts, even if a request tries to smuggle a different `role` field;
   creating additional admins stays CLI-only.
+- **Admins can delete any account (user or admin) except their own** from
+  the same page: `POST /admin/users/<id>/delete` (`admin.users_delete`,
+  `admin_required`). Self-deletion is rejected server-side (flash error,
+  account untouched) so an admin can't lock themselves out; deleting the
+  last *other* admin is still allowed, since `manage.py create-user
+  --role admin` can always mint a replacement.
 - **Any logged-in user (admin or user) can change their own password** via
   `GET/POST /account/password` (`auth.change_password` in `app/auth.py`,
   `@login_required`). Requires the current password, a new password (min.

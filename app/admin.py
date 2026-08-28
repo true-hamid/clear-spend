@@ -320,3 +320,18 @@ def users_create():
     db.session.commit()
     flash(f"Created user '{username}'.", "success")
     return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def users_delete(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    if user.id == current_user.id:
+        flash("You cannot delete your own account.", "error")
+        return redirect(url_for("admin.users"))
+
+    username = user.username
+    db.session.delete(user)
+    db.session.commit()
+    flash(f"Deleted user '{username}'.", "success")
+    return redirect(url_for("admin.users"))

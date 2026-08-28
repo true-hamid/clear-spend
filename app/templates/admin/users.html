@@ -21,6 +21,7 @@
       <th>Username</th>
       <th>Role</th>
       <th>Created</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -29,9 +30,19 @@
       <td>{{ row.username }}</td>
       <td>{{ row.role }}</td>
       <td class="muted">{{ row.created_at.strftime('%Y-%m-%d') if row.created_at else '' }}</td>
+      <td>
+        {% if row.id != current_user.id %}
+        <form method="post" action="{{ url_for('admin.users_delete', user_id=row.id) }}"
+              onsubmit="return confirm('Delete user \'' + {{ row.username|tojson }} + '\'?');">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+        {% else %}
+        <span class="muted">(you)</span>
+        {% endif %}
+      </td>
     </tr>
     {% else %}
-    <tr><td colspan="3" class="muted">No users found.</td></tr>
+    <tr><td colspan="4" class="muted">No users found.</td></tr>
     {% endfor %}
   </tbody>
 </table>
