@@ -14,9 +14,11 @@
     {% if current_user.is_admin %}
     <a href="{{ url_for('admin.mappings') }}">Mapping Manager</a>
     <a href="{{ url_for('admin.unrecognized') }}">Unrecognized Merchants</a>
+    <a href="{{ url_for('admin.users') }}">Manage Users</a>
     {% endif %}
     <span class="spacer"></span>
     <span class="whoami">{{ current_user.username }} ({{ current_user.role }})</span>
+    <a href="{{ url_for('auth.change_password') }}">Change Password</a>
     <a href="{{ url_for('auth.logout') }}">Log out</a>
   </nav>
   {% endif %}
