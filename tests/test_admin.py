@@ -1,8 +1,8 @@
 import io
 
 from app.matching import record_unrecognized
-from app.models import CleanedMerchant, MerchantMapping, UnrecognizedMerchant
-from tests.conftest import login_admin
+from app.models import CleanedMerchant, MerchantMapping, UnrecognizedMerchant, User
+from tests.conftest import login_admin, login_user
 
 
 class TestMappingManagerCrud:
@@ -387,3 +387,120 @@ class TestUnrecognizedMerchantsQueue:
 
             assert db.session.get(UnrecognizedMerchant, row_id) is None
             assert MerchantMapping.query.filter_by(original_description="DISMISS_ME").first() is None
+
+
+class TestUserManagement:
+    def test_users_page_requires_admin(self, client, normal_user):
+        login_user(client)
+        resp = client.get("/admin/users")
+        assert resp.status_code == 403
+
+    def test_unauthenticated_users_page_redirects_to_login(self, client):
+        resp = client.get("/admin/users")
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+
+    def test_admin_can_view_users_page(self, client, admin_user):
+        login_admin(client)
+        resp = client.get("/admin/users")
+        assert resp.status_code == 200
+        assert b"admin" in resp.data
+
+    def test_admin_creates_normal_user(self, app, client, admin_user):
+        login_admin(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "bob", "password": "bobpassword", "confirm_password": "bobpassword"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"Created user &#39;bob&#39;" in resp.data or b"Created user 'bob'" in resp.data
+        with app.app_context():
+            user = User.query.filter_by(username="bob").first()
+            assert user is not None
+            assert user.role == "user"
+
+    def test_new_user_can_log_in_with_admin_set_password(self, client, admin_user):
+        login_admin(client)
+        client.post(
+            "/admin/users/create",
+            data={"username": "carol", "password": "carolpassword", "confirm_password": "carolpassword"},
+        )
+        client.get("/logout")
+        resp = client.post(
+            "/login",
+            data={"username": "carol", "password": "carolpassword"},
+            follow_redirects=True,
+        )
+        assert b"Upload statement PDFs" in resp.data
+
+    def test_create_user_rejects_duplicate_username(self, app, client, admin_user, normal_user):
+        login_admin(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "alice", "password": "newpassword1", "confirm_password": "newpassword1"},
+            follow_redirects=True,
+        )
+        assert b"already exists" in resp.data
+        with app.app_context():
+            assert User.query.filter_by(username="alice").count() == 1
+
+    def test_create_user_requires_matching_passwords(self, app, client, admin_user):
+        login_admin(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "dave", "password": "onepassword", "confirm_password": "differentpassword"},
+            follow_redirects=True,
+        )
+        assert b"do not match" in resp.data
+        with app.app_context():
+            assert User.query.filter_by(username="dave").first() is None
+
+    def test_create_user_requires_minimum_password_length(self, app, client, admin_user):
+        login_admin(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "eve", "password": "short", "confirm_password": "short"},
+            follow_redirects=True,
+        )
+        assert b"at least 8 characters" in resp.data
+        with app.app_context():
+            assert User.query.filter_by(username="eve").first() is None
+
+    def test_create_user_requires_username_and_password(self, client, admin_user):
+        login_admin(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "", "password": "", "confirm_password": ""},
+            follow_redirects=True,
+        )
+        assert b"required" in resp.data
+
+    def test_normal_user_cannot_create_users(self, app, client, normal_user):
+        login_user(client)
+        resp = client.post(
+            "/admin/users/create",
+            data={"username": "mallory", "password": "malorypassword", "confirm_password": "malorypassword"},
+        )
+        assert resp.status_code == 403
+        with app.app_context():
+            assert User.query.filter_by(username="mallory").first() is None
+
+    def test_created_user_always_has_user_role_regardless_of_form_input(self, app, client, admin_user):
+        """The in-app form only ever creates 'user' role accounts — creating
+        admins stays CLI-only (manage.py create-user), even if a crafted
+        request tries to smuggle a role field in."""
+        login_admin(client)
+        client.post(
+            "/admin/users/create",
+            data={
+                "username": "sneaky",
+                "password": "sneakypassword",
+                "confirm_password": "sneakypassword",
+                "role": "admin",
+            },
+        )
+        with app.app_context():
+            user = User.query.filter_by(username="sneaky").first()
+            assert user is not None
+            assert user.role == "user"

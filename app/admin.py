@@ -4,9 +4,10 @@ from functools import wraps
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from werkzeug.security import generate_password_hash
 
 from app import db
-from app.models import CleanedMerchant, MerchantMapping, UnrecognizedMerchant
+from app.models import CleanedMerchant, MerchantMapping, UnrecognizedMerchant, User
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -277,3 +278,45 @@ def unrecognized_delete(row_id):
     db.session.commit()
     flash("Removed from the unrecognized merchants queue.", "success")
     return redirect(url_for("admin.unrecognized"))
+
+
+# --- User management -----------------------------------------------------
+# In-app account creation is deliberately restricted to the 'user' role —
+# creating admin accounts stays CLI-only (manage.py create-user) per
+# docs/auth.md.
+
+
+@admin_bp.route("/users")
+@admin_required
+def users():
+    rows = User.query.order_by(User.username).all()
+    return render_template("admin/users.html", rows=rows)
+
+
+@admin_bp.route("/users/create", methods=["POST"])
+@admin_required
+def users_create():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not username or not password:
+        flash("Username and password are required.", "error")
+        return redirect(url_for("admin.users"))
+    if password != confirm_password:
+        flash("Passwords do not match.", "error")
+        return redirect(url_for("admin.users"))
+    if len(password) < 8:
+        flash("Password must be at least 8 characters.", "error")
+        return redirect(url_for("admin.users"))
+
+    existing = User.query.filter(db.func.lower(User.username) == username.lower()).first()
+    if existing:
+        flash(f"A user named '{username}' already exists.", "error")
+        return redirect(url_for("admin.users"))
+
+    user = User(username=username, password_hash=generate_password_hash(password), role="user")
+    db.session.add(user)
+    db.session.commit()
+    flash(f"Created user '{username}'.", "success")
+    return redirect(url_for("admin.users"))
