@@ -13,11 +13,17 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     os.makedirs(app.instance_path, exist_ok=True)
 
+    database_url = os.environ.get(
+        "DATABASE_URL", f"sqlite:///{os.path.join(app.instance_path, 'clearspend.db')}"
+    )
+    if database_url.startswith("postgres://"):
+        # SQLAlchemy 2.x dropped support for the legacy "postgres://" scheme
+        # that some providers (e.g. Render) still hand out.
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production"),
-        SQLALCHEMY_DATABASE_URI=os.environ.get(
-            "DATABASE_URL", f"sqlite:///{os.path.join(app.instance_path, 'clearspend.db')}"
-        ),
+        SQLALCHEMY_DATABASE_URI=database_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         MAX_CONTENT_LENGTH=32 * 1024 * 1024,  # 32MB total upload cap
         SESSION_COOKIE_HTTPONLY=True,
