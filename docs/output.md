@@ -1,14 +1,28 @@
-# Output workbook
+# Output files
 
 **Implementation**: `app/excel_builder.py`, invoked from
 `app/main.py:upload` after all uploaded PDFs are parsed and matched.
+
+Processing a batch of statements produces up to two downloadable files:
+
+1. **The processed workbook** (`.xlsx`, `build_workbook`) — always produced.
+   Every parsed transaction, matched or not, on the `Transactions` tab (see
+   "Tabs" below).
+2. **The Needs Review CSV** (`.csv`, `build_review_csv`) — only produced
+   when at least one transaction in the run went unmatched. Two columns,
+   `Original Description | Type` (`Credit`/`Debit`), one row per
+   unrecognized transaction. This replaces the old workbook-embedded "Needs
+   Review" tab. The summary page (`app/templates/summary.html`) tells the
+   user to hand this file to an admin so the unknown merchants can be added
+   to `merchant_mapping` for better matching on future uploads — see
+   `docs/mapping.md` and `docs/unrecognized_merchants.md`.
 
 ## Tabs
 
 1. **Transactions** — every parsed row from every uploaded PDF, combined.
    Columns: `Transaction Date | Posting Date | Original Description |
-   Cleaned Merchant | Category | Type | Amount (AED) | Source File /
-   Statement Period | Possible Duplicate`.
+   Cleaned Merchant | Category | Type | Amount (AED) | Source File |
+   Possible Duplicate`.
    - Header row: bold white text on a solid fill (`HEADER_FILL`/`HEADER_FONT`
      in `app/excel_builder.py`), frozen (`freeze_panes = "A2"`), autofilter
      over the full used range.
@@ -16,6 +30,9 @@
    - Credits (`is_credit=True`, i.e. a trailing `CR` on the statement line)
      are stored as **negative** amounts with `Type = Credit`; debits are
      positive with `Type = Debit`.
+   - `Source File` is the uploaded filename with its extension stripped
+     (`Path(r.source_file).stem`), e.g. `sample_statement.pdf` becomes
+     `sample_statement`.
 2. **Category Summary** — one row per distinct category present in this
    run, `Category | Total Amount (AED) | # Transactions`, computed with
    live `=SUMIF(...)` / `=COUNTIF(...)` formulas referencing the
@@ -37,9 +54,6 @@
 4. **Mapping Reference** — a dump of the full `merchant_mapping` table as
    it stood at the time of this run (not filtered to only the merchants
    seen in this batch), so the output is self-contained for sanity-checking.
-5. **Needs Review** — same column layout as Transactions, filtered to
-   rows where `Category == "Uncategorized / Other"` — the spreadsheet-side
-   mirror of the `unrecognized_merchants` admin queue, scoped to this run.
 
 ## Duplicate detection (`flag_duplicates`)
 
@@ -69,9 +83,14 @@ arises.
 
 ## Storage and lifecycle
 
-Generated workbooks are never written to the database. They're saved to a
-temp file, referenced by a random `secrets.token_urlsafe(24)` token held
-in `main.py`'s in-memory `_pending_downloads` dict (guarded by a
-`threading.Lock`), and deleted either immediately after `/download/<token>`
-serves them or after a 30-minute TTL sweep (`_sweep_expired_downloads`,
-run at the top of `/upload` and `/download`) — whichever comes first.
+Neither output file is ever written to the database or disk long-term.
+Each is held as in-memory bytes in `main.py`'s `_pending_downloads` dict
+(guarded by a `threading.Lock`), keyed by its own random
+`secrets.token_urlsafe(24)` token — the workbook and (when present) the
+review CSV get separate tokens and separate `/download/<token>` links, each
+tagged with its own `mimetype` so `/download/<token>` can serve either type
+correctly. The workbook still passes through a temp file transiently for
+the LibreOffice recalculation step; the review CSV never touches disk.
+Every entry is deleted either immediately after `/download/<token>` serves
+it or after a 30-minute TTL sweep (`_sweep_expired_downloads`, run at the
+top of `/upload` and `/download`) — whichever comes first.

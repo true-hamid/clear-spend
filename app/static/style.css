@@ -85,6 +85,16 @@ button.danger { background: var(--error); }
 
 .stats { font-size: 1.05rem; line-height: 1.9; }
 
+.review-callout {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  border-radius: 6px;
+}
+.review-callout .button { margin-bottom: 0.5rem; }
+.review-callout .muted { margin: 0; }
+
 .data-table {
   width: 100%;
   border-collapse: collapse;

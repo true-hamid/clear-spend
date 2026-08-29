@@ -1,7 +1,13 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from app.excel_builder import ProcessedTransaction, build_workbook, flag_duplicates, recalculate_with_libreoffice
+from app.excel_builder import (
+    ProcessedTransaction,
+    build_review_csv,
+    build_workbook,
+    flag_duplicates,
+    recalculate_with_libreoffice,
+)
 from app.matching import UNCATEGORIZED
 from app.pdf_parser import RawTransaction
 
@@ -60,7 +66,6 @@ class TestBuildWorkbook:
             "Category Summary",
             "Merchant Summary",
             "Mapping Reference",
-            "Needs Review",
         ]
 
     def test_credit_stored_as_negative_amount_with_credit_type(self):
@@ -79,6 +84,19 @@ class TestBuildWorkbook:
         row = list(ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
         assert row[5] == "Debit"
         assert row[6] == 75.0
+
+    def test_source_file_column_strips_extension(self):
+        raw = _raw("SOME SHOP", 75.0, source_file="jan_statement.pdf")
+        wb = build_workbook([_processed(raw)], [])
+        ws = wb["Transactions"]
+        row = list(ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        assert row[7] == "jan_statement"
+
+    def test_transactions_header_has_source_file_column_not_statement_period(self):
+        wb = build_workbook([], [])
+        ws = wb["Transactions"]
+        headers = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+        assert headers[7] == "Source File"
 
     def test_category_summary_has_live_formulas_not_precomputed_values(self):
         raw = _raw("SOME SHOP", 75.0)
@@ -165,15 +183,6 @@ class TestBuildWorkbook:
         txn_merchants = [row[3] for row in txn_ws.iter_rows(min_row=2, values_only=True)]
         assert "Payment Received" in txn_merchants
 
-    def test_needs_review_only_contains_uncategorized_rows(self):
-        matched = _processed(_raw("KNOWN SHOP", 10.0), category="Groceries", matched=True)
-        unmatched = _processed(_raw("UNKNOWN SHOP", 20.0), category=UNCATEGORIZED, matched=False)
-        wb = build_workbook([matched, unmatched], [])
-        ws = wb["Needs Review"]
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
-        assert len(rows) == 1
-        assert rows[0][2] == "UNKNOWN SHOP"
-
     def test_mapping_reference_dumps_all_supplied_rows(self):
         mapping_rows = [
             {"original_description": "X", "cleaned_name": "X Clean", "category": "Retail"},
@@ -195,6 +204,42 @@ class TestBuildWorkbook:
         ws = wb["Transactions"]
         assert ws.freeze_panes == "A2"
         assert ws.auto_filter.ref is not None
+
+
+class TestBuildReviewCsv:
+    def test_returns_none_when_nothing_needs_review(self):
+        matched = _processed(_raw("KNOWN SHOP", 10.0), category="Groceries", matched=True)
+        assert build_review_csv([matched]) is None
+
+    def test_returns_none_for_empty_input(self):
+        assert build_review_csv([]) is None
+
+    def test_only_contains_uncategorized_rows(self):
+        matched = _processed(_raw("KNOWN SHOP", 10.0), category="Groceries", matched=True)
+        unmatched = _processed(_raw("UNKNOWN SHOP", 20.0), category=UNCATEGORIZED, matched=False)
+        csv_text = build_review_csv([matched, unmatched])
+        lines = csv_text.strip().splitlines()
+        assert lines == ["Original Description,Type", "UNKNOWN SHOP,Debit"]
+
+    def test_credit_rows_are_labeled_credit(self):
+        unmatched = _processed(
+            _raw("UNKNOWN REFUND", 20.0, is_credit=True), category=UNCATEGORIZED, matched=False
+        )
+        csv_text = build_review_csv([unmatched])
+        lines = csv_text.strip().splitlines()
+        assert lines[1] == "UNKNOWN REFUND,Credit"
+
+    def test_multiple_unrecognized_rows_all_included(self):
+        u1 = _processed(_raw("UNKNOWN A", 5.0), category=UNCATEGORIZED, matched=False)
+        u2 = _processed(_raw("UNKNOWN B", 15.0, is_credit=True), category=UNCATEGORIZED, matched=False)
+        matched = _processed(_raw("KNOWN SHOP", 10.0), category="Groceries", matched=True)
+        csv_text = build_review_csv([matched, u1, u2])
+        lines = csv_text.strip().splitlines()
+        assert lines == [
+            "Original Description,Type",
+            "UNKNOWN A,Debit",
+            "UNKNOWN B,Credit",
+        ]
 
 
 class TestRecalculateWithLibreoffice:

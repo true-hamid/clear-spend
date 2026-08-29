@@ -21,6 +21,10 @@ def _download_token(html: bytes) -> str:
     return match.group(1).decode()
 
 
+def _download_tokens(html: bytes) -> list[str]:
+    return [m.decode() for m in re.findall(rb'/download/([A-Za-z0-9_-]+)', html)]
+
+
 class TestUploadFlow:
     def test_full_pipeline_with_real_statement(self, app, client, admin_user, seeded_mapping):
         login_admin(client)
@@ -34,6 +38,35 @@ class TestUploadFlow:
         assert b"123</strong> merchants matched" in resp.data
         assert b"2</strong> merchants not recognized" in resp.data
         assert b"0</strong> possible duplicate" in resp.data
+
+    def test_unrecognized_merchants_produce_a_second_review_csv_download(
+        self, app, client, admin_user, seeded_mapping
+    ):
+        login_admin(client)
+        resp = client.post(
+            "/upload",
+            data={"statements": [_pdf_file()]},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert b"share this file with the admin" in resp.data.lower()
+
+        tokens = _download_tokens(resp.data)
+        assert len(tokens) == 2
+        txn_token, review_token = tokens
+
+        review_resp = client.get(f"/download/{review_token}")
+        assert review_resp.status_code == 200
+        assert review_resp.mimetype == "text/csv"
+        lines = review_resp.data.decode("utf-8").strip().splitlines()
+        assert lines[0] == "Original Description,Type"
+        assert len(lines) == 3  # header + 2 unrecognized merchants
+        assert "[MERCHANT NAME REMOVED],Debit" in lines
+
+        # The main workbook no longer carries a "Needs Review" tab.
+        txn_resp = client.get(f"/download/{txn_token}")
+        wb = load_workbook(io.BytesIO(txn_resp.data))
+        assert "Needs Review" not in wb.sheetnames
 
     def test_unmatched_merchant_populates_unrecognized_queue(self, app, client, admin_user, seeded_mapping):
         login_admin(client)
@@ -162,8 +195,8 @@ class TestUploadFlow:
         categories = [row[0] for row in summary_ws.iter_rows(min_row=2, values_only=True)]
         assert "Installments & EMI" in categories
 
-        review_ws = wb["Needs Review"]
-        assert review_ws.max_row == 1  # header only, no rows
+        # Nothing needed review, so no second download link/file was offered.
+        assert b"Needs Review CSV" not in resp.data
 
     def test_unparseable_pdf_is_caught_and_reported(self, client, admin_user, monkeypatch):
         def boom(path, name):
