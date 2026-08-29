@@ -10,6 +10,12 @@
     <li><strong>{{ stats.duplicates }}</strong> possible duplicate row(s) flagged</li>
   </ul>
   <a class="button" href="{{ url_for('main.download', token=token) }}">Download Excel workbook</a>
+  {% if review_token %}
+  <div class="review-callout">
+    <a class="button" href="{{ url_for('main.download', token=review_token) }}">Download Needs Review CSV</a>
+    <p class="muted">Share this file with the admin so they can categorize the unknown merchants and improve matching for future uploads.</p>
+  </div>
+  {% endif %}
   <p class="muted"><a href="{{ url_for('main.upload') }}">&larr; Upload more statements</a></p>
 </div>
 {% endblock %}

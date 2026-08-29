@@ -20,7 +20,13 @@ from flask import (
 from flask_login import login_required
 
 from app import db
-from app.excel_builder import ProcessedTransaction, build_workbook, flag_duplicates, recalculate_with_libreoffice
+from app.excel_builder import (
+    ProcessedTransaction,
+    build_review_csv,
+    build_workbook,
+    flag_duplicates,
+    recalculate_with_libreoffice,
+)
 from app.matching import MatchingEngine, record_unrecognized
 from app.pdf_parser import parse_pdf
 
@@ -154,15 +160,28 @@ def upload():
         except OSError:
             pass
 
-    token = secrets.token_urlsafe(24)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    token = secrets.token_urlsafe(24)
     with _pending_lock:
         _pending_downloads[token] = {
             "data": workbook_bytes,
             "filename": f"ClearSpend_Export_{timestamp}.xlsx",
+            "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "expires_at": datetime.now(timezone.utc) + DOWNLOAD_TTL,
         }
     session["download_token"] = token
+
+    review_csv = build_review_csv(processed)
+    review_token = None
+    if review_csv is not None:
+        review_token = secrets.token_urlsafe(24)
+        with _pending_lock:
+            _pending_downloads[review_token] = {
+                "data": review_csv.encode("utf-8"),
+                "filename": f"ClearSpend_NeedsReview_{timestamp}.csv",
+                "mimetype": "text/csv",
+                "expires_at": datetime.now(timezone.utc) + DOWNLOAD_TTL,
+            }
 
     stats = {
         "total": len(processed),
@@ -171,7 +190,7 @@ def upload():
         "duplicates": sum(1 for p in processed if p.possible_duplicate),
         "recalculated": recalculated,
     }
-    return render_template("summary.html", stats=stats, token=token)
+    return render_template("summary.html", stats=stats, token=token, review_token=review_token)
 
 
 @main_bp.route("/download/<token>")
@@ -187,5 +206,5 @@ def download(token):
         io.BytesIO(entry["data"]),
         as_attachment=True,
         download_name=entry["filename"],
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimetype=entry["mimetype"],
     )

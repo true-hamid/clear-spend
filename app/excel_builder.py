@@ -1,7 +1,12 @@
-"""Builds the output .xlsx workbook: Transactions, Category Summary,
-Merchant Summary, Mapping Reference, Needs Review. See build_instructions.md
-Section 5-6.
+"""Builds the two output files handed back after processing:
+- an .xlsx workbook (Transactions, Category Summary, Merchant Summary,
+  Mapping Reference) with every recognized and unrecognized transaction, and
+- a .csv of just the transactions that need manual cleansing/categorization,
+  for the admin to work through.
+See build_instructions.md Section 5-6.
 """
+import csv
+import io
 import logging
 import shutil
 import subprocess
@@ -39,7 +44,7 @@ TRANSACTIONS_HEADERS = [
     "Category",
     "Type",
     "Amount (AED)",
-    "Source File / Statement Period",
+    "Source File",
     "Possible Duplicate",
 ]
 
@@ -96,7 +101,7 @@ def build_workbook(processed: list[ProcessedTransaction], mapping_rows: list[dic
         r = p.raw
         signed_amount = -abs(r.amount) if r.is_credit else abs(r.amount)
         row_type = "Credit" if r.is_credit else "Debit"
-        source = f"{r.source_file}" + (f" / {r.statement_period}" if r.statement_period else "")
+        source = Path(r.source_file).stem
         ws.append(
             [
                 r.transaction_date,
@@ -189,42 +194,32 @@ def build_workbook(processed: list[ProcessedTransaction], mapping_rows: list[dic
     if ws3.max_row > 1:
         ws3.auto_filter.ref = f"A1:C{ws3.max_row}"
 
-    # --- Needs Review tab ---
-    ws4 = wb.create_sheet("Needs Review")
-    ws4.append(TRANSACTIONS_HEADERS)
-    for p in processed:
-        if p.category != UNCATEGORIZED:
-            continue
-        r = p.raw
-        signed_amount = -abs(r.amount) if r.is_credit else abs(r.amount)
-        row_type = "Credit" if r.is_credit else "Debit"
-        source = f"{r.source_file}" + (f" / {r.statement_period}" if r.statement_period else "")
-        ws4.append(
-            [
-                r.transaction_date,
-                r.posting_date,
-                r.description,
-                p.cleaned_name,
-                p.category,
-                row_type,
-                signed_amount,
-                source,
-                "Yes" if p.possible_duplicate else "",
-            ]
-        )
-    for row in range(2, ws4.max_row + 1):
-        ws4.cell(row=row, column=7).number_format = AMOUNT_FORMAT
-    if ws4.max_row > 1:
-        ws4.auto_filter.ref = f"A1:{get_column_letter(len(TRANSACTIONS_HEADERS))}{ws4.max_row}"
-    _style_header(ws4, len(TRANSACTIONS_HEADERS))
-    _autosize(ws4, len(TRANSACTIONS_HEADERS))
-
     for sheet in wb.worksheets:
         for row in sheet.iter_rows(min_row=2):
             for cell in row:
                 cell.font = BODY_FONT
 
     return wb
+
+
+REVIEW_CSV_HEADERS = ["Original Description", "Type"]
+
+
+def build_review_csv(processed: list[ProcessedTransaction]) -> str | None:
+    """Returns CSV text listing the transactions that need manual cleansing
+    and categorization (unrecognized merchants), for handoff to the admin —
+    or None if every transaction in this run was matched."""
+    rows = [p for p in processed if p.category == UNCATEGORIZED]
+    if not rows:
+        return None
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(REVIEW_CSV_HEADERS)
+    for p in rows:
+        row_type = "Credit" if p.raw.is_credit else "Debit"
+        writer.writerow([p.raw.description, row_type])
+    return buffer.getvalue()
 
 
 def recalculate_with_libreoffice(xlsx_path: str) -> bool:
