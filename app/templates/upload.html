@@ -5,11 +5,27 @@
   <h1>Upload statement PDFs</h1>
   <p class="muted">Upload one or more credit card statement PDFs. They're parsed and matched against
     the shared merchant mapping table, then combined into a single Excel workbook you can download.</p>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" id="upload-form">
     <label>Statement PDF(s)
       <input type="file" name="statements" accept="application/pdf" multiple required>
     </label>
-    <button type="submit">Process statements</button>
+    <button type="submit" id="upload-submit">Process statements</button>
   </form>
 </div>
+
+<div class="processing-overlay" id="processing-overlay">
+  <div class="processing-box">
+    <div class="spinner"></div>
+    <p>Processing statements&hellip; this can take a minute.</p>
+  </div>
+</div>
+
+<script>
+  document.getElementById('upload-form').addEventListener('submit', function () {
+    var submitBtn = document.getElementById('upload-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Processing…';
+    document.getElementById('processing-overlay').classList.add('active');
+  });
+</script>
 {% endblock %}

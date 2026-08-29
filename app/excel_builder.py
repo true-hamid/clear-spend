@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -58,6 +59,10 @@ class ProcessedTransaction:
     possible_duplicate: bool = False
 
 
+def _transaction_date_key(p: ProcessedTransaction) -> datetime:
+    return datetime.strptime(p.raw.transaction_date, "%d/%m/%Y")
+
+
 def _style_header(ws: Worksheet, ncols: int):
     for col in range(1, ncols + 1):
         cell = ws.cell(row=1, column=col)
@@ -97,7 +102,7 @@ def build_workbook(processed: list[ProcessedTransaction], mapping_rows: list[dic
     ws = wb.active
     ws.title = "Transactions"
     ws.append(TRANSACTIONS_HEADERS)
-    for p in processed:
+    for p in sorted(processed, key=_transaction_date_key):
         r = p.raw
         signed_amount = -abs(r.amount) if r.is_credit else abs(r.amount)
         row_type = "Credit" if r.is_credit else "Debit"
@@ -216,7 +221,7 @@ def build_review_csv(processed: list[ProcessedTransaction]) -> str | None:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(REVIEW_CSV_HEADERS)
-    for p in rows:
+    for p in sorted(rows, key=_transaction_date_key):
         row_type = "Credit" if p.raw.is_credit else "Debit"
         writer.writerow([p.raw.description, row_type])
     return buffer.getvalue()
